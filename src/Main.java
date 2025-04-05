@@ -1,58 +1,148 @@
 
-
 import product.Produit;
 
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
-import java.util.Optional;
 import java.util.Scanner;
 
+import user.*;
+import product.Produit;
+import java.util.*;
+
 public class Main {
-    private static List<Produit> stock = new ArrayList<>();
+    private static List<User> utilisateurs = new ArrayList<>();
+    private static List<Produit> inventaire = new ArrayList<>();
     private static Scanner scanner = new Scanner(System.in);
+    private static User utilisateurActuel = null;
 
     public static void main(String[] args) {
+        System.out.println("========================================");
+        System.out.println("  🎉 BIENVENUE DANS NOTRE APPLICATION  🎉 ");
+        System.out.println("========================================");
+
         int choix;
         do {
-            afficherMenu();
+            afficherMenuPrincipal();
             choix = scanner.nextInt();
             scanner.nextLine(); // Consommer le retour à la ligne
 
             switch (choix) {
                 case 1:
-                    ajouterProduit();
+                    inscrireUtilisateur();
                     break;
                 case 2:
-                    modifierProduit();
-                    break;
-                case 3:
-                    supprimerProduit();
-                    break;
-                case 4:
-                    rechercherProduit();
-                    break;
-                case 5:
-                    afficherProduits();
+                    seConnecter();
                     break;
                 case 0:
-                    System.out.println("Merci d'avoir utilisé le système !");
+                    System.out.println("Merci d'avoir utilisé notre système. À bientôt !");
                     break;
                 default:
-                    System.out.println("Choix invalide, veuillez réessayer.");
+                    System.out.println("Choix invalide. Réessayez.");
             }
         } while (choix != 0);
     }
 
-    private static void afficherMenu() {
-        System.out.println("\n==== Menu Gestion de Produits ====");
-        System.out.println("1. Ajouter un produit");
-        System.out.println("2. Modifier un produit");
-        System.out.println("3. Supprimer un produit");
-        System.out.println("4. Rechercher un produit");
-        System.out.println("5. Afficher tous les produits");
+    private static void afficherMenuPrincipal() {
+        System.out.println("\n==== Menu Principal ====");
+        System.out.println("1. S'inscrire");
+        System.out.println("2. Se connecter");
         System.out.println("0. Quitter");
         System.out.print("Votre choix : ");
+    }
+
+    private static void inscrireUtilisateur() {
+        System.out.println("\n=== Inscription ===");
+        System.out.print("Nom : ");
+        String nom = scanner.nextLine();
+        System.out.print("Email : ");
+        String email = scanner.nextLine();
+        System.out.print("Mot de passe : ");
+        String password = scanner.nextLine();
+
+        if (emailExiste(email)) {
+            System.out.println("\u26A0️ Cet email est déjà utilisé. Veuillez en choisir un autre.");
+            return;
+        }
+
+        System.out.println("Rôle : (1) Client, (2) Vendeur");
+        int role = scanner.nextInt();
+        scanner.nextLine();
+
+        User nouvelUtilisateur;
+        if (role == 1) {
+            nouvelUtilisateur = new Client(nom, email, password);
+        } else if (role == 2) {
+            System.out.print("Matricule : ");
+            String matricule = scanner.nextLine();
+            nouvelUtilisateur = new Vendeur(nom, email, password, matricule);
+        } else {
+            System.out.println("Rôle invalide. Inscription annulée.");
+            return;
+        }
+
+        utilisateurs.add(nouvelUtilisateur);
+        System.out.println("✅ Inscription réussie ! Vous pouvez maintenant vous connecter.");
+    }
+
+    private static boolean emailExiste(String email) {
+        for (User user : utilisateurs) {
+            if (user.getEmail().equalsIgnoreCase(email)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void seConnecter() {
+        System.out.println("\n=== Connexion ===");
+        System.out.print("Email : ");
+        String email = scanner.nextLine();
+        System.out.print("Mot de passe : ");
+        String password = scanner.nextLine();
+
+        for (User user : utilisateurs) {
+            if (user.getEmail().equals(email) && user.getPassword().equals(password)) {
+                utilisateurActuel = user;
+                System.out.println("✅ Connexion réussie. Bienvenue, " + user.getName() + "!");
+                afficherMenuUtilisateur();
+                return;
+            }
+        }
+        System.out.println("\u26A0️ Email ou mot de passe incorrect. Réessayez.");
+    }
+
+    private static void afficherMenuUtilisateur() {
+        int choix;
+        do {
+            System.out.println("\n==== Menu Utilisateur ====");
+            System.out.println("1. Consulter les produits");
+            if (utilisateurActuel instanceof Vendeur) {
+                System.out.println("2. Ajouter un produit");
+            }
+            System.out.println("0. Se déconnecter");
+            System.out.print("Votre choix : ");
+            choix = scanner.nextInt();
+            scanner.nextLine();
+
+            switch (choix) {
+                case 1:
+                    afficherProduits();
+                    break;
+                case 2:
+                    if (utilisateurActuel instanceof Vendeur) {
+                        ajouterProduit();
+                    } else {
+                        System.out.println("\u26A0️ Vous n'avez pas les permissions pour ajouter un produit.");
+                    }
+                    break;
+                case 0:
+                    System.out.println("Déconnexion réussie. Retour au menu principal.");
+                    utilisateurActuel = null;
+                    break;
+                default:
+                    System.out.println("Choix invalide. Réessayez.");
+            }
+        } while (choix != 0);
     }
 
     private static void ajouterProduit() {
@@ -64,77 +154,19 @@ public class Main {
         int quantiteStock = scanner.nextInt();
         System.out.print("Seuil d'alerte : ");
         int seuilAlerte = scanner.nextInt();
-        scanner.nextLine(); // Consommer le retour à la ligne
+        scanner.nextLine();
 
-        Produit produit = new Produit((long) (stock.size() + 1), nom, prix, quantiteStock, seuilAlerte, new Date());
-        stock.add(produit);
-        System.out.println("Produit ajouté avec succès !");
-    }
-
-    private static void modifierProduit() {
-        System.out.print("ID du produit à modifier : ");
-        long id = scanner.nextLong();
-        scanner.nextLine(); // Consommer le retour à la ligne
-
-        Optional<Produit> produitOpt = stock.stream().filter(p -> p.getId() == id).findFirst();
-        if (produitOpt.isPresent()) {
-            Produit produit = produitOpt.get();
-            System.out.print("Nouveau nom : ");
-            String nom = scanner.nextLine();
-            System.out.print("Nouveau prix : ");
-            float prix = scanner.nextFloat();
-            System.out.print("Nouvelle quantité en stock : ");
-            int quantiteStock = scanner.nextInt();
-            System.out.print("Nouveau seuil d'alerte : ");
-            int seuilAlerte = scanner.nextInt();
-            scanner.nextLine(); // Consommer le retour à la ligne
-
-            produit.modifierProduit(nom, prix, quantiteStock, seuilAlerte);
-            System.out.println("Produit modifié avec succès !");
-        } else {
-            System.out.println("Produit non trouvé.");
-        }
-    }
-
-    private static void supprimerProduit() {
-        System.out.print("ID du produit à supprimer : ");
-        long id = scanner.nextLong();
-        scanner.nextLine(); // Consommer le retour à la ligne
-
-        boolean removed = stock.removeIf(p -> p.getId() == id);
-        if (removed) {
-            System.out.println("Produit supprimé avec succès !");
-        } else {
-            System.out.println("Produit non trouvé.");
-        }
-    }
-
-    private static void rechercherProduit() {
-        System.out.print("ID du produit à rechercher : ");
-        long id = scanner.nextLong();
-        scanner.nextLine(); // Consommer le retour à la ligne
-
-        Optional<Produit> produit = stock.stream().filter(p -> p.getId() == id).findFirst();
-        if (produit.isPresent()) {
-            Produit p = produit.get();
-            System.out.println("\n=== Détails du produit ===");
-            System.out.println("ID : " + p.getId());
-            System.out.println("Nom : " + p.getNom());
-            System.out.println("Prix : " + p.getPrix());
-            System.out.println("Quantité en stock : " + p.getQuantiteStock());
-            System.out.println("Seuil d'alerte : " + p.getSeuilAlerte());
-            System.out.println("Date d'ajout : " + p.getDateAjout());
-        } else {
-            System.out.println("Produit non trouvé.");
-        }
+        Produit nouveauProduit = new Produit(nom, prix, quantiteStock, seuilAlerte);
+        inventaire.add(nouveauProduit);
+        System.out.println("✅ Produit ajouté avec succès !");
     }
 
     private static void afficherProduits() {
-        if (stock.isEmpty()) {
+        if (inventaire.isEmpty()) {
             System.out.println("Aucun produit en stock.");
         } else {
             System.out.println("\n=== Liste des Produits ===");
-            for (Produit p : stock) {
+            for (Produit p : inventaire) {
                 System.out.println("ID: " + p.getId() + " | Nom: " + p.getNom() + " | Prix: " + p.getPrix() + " | Stock: " + p.getQuantiteStock());
             }
         }

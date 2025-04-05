@@ -1,21 +1,11 @@
 package product;
 import java.util.Date;
 import java.util.List;
-import java.util.ArrayList;
 import java.util.stream.Collectors;
-
 public class Produit {
     private static Long nextId = 1L; // Compteur pour les IDs
-
     private Long id;
     private String nom;
-
-
-
-    public static void setNextId(Long nextId) {
-        Produit.nextId = nextId;
-    }
-
     private float prix;
     private int quantiteStock;
     private int seuilAlerte;
