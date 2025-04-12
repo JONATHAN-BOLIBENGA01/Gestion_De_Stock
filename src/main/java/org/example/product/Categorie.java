@@ -1,4 +1,4 @@
-package product;
+package org.example.product;
 import java.util.List;
 
 public class Categorie {

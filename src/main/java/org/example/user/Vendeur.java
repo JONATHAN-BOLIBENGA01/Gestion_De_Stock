@@ -1,9 +1,11 @@
-package user;
+package org.example.user;
 
+import com.google.gson.Gson;
 import java.util.List;
 
 public class Vendeur extends User {
     private String matricule;
+    private Gson gson = new Gson(); // Créer une instance de Gson
 
     public Vendeur(String name, String email, String password, String matricule) {
         super(name, email, password);
@@ -12,15 +14,16 @@ public class Vendeur extends User {
 
     @Override
     public void sInscrire(List<User> users) {
-        System.out.println("Erreur : Un vendeur ne peut pas s'inscrire lui-même.");
-    }
-
-    public void ajouterVendeur(List<User> users, Vendeur nouveauVendeur) {
-        if (emailExiste(users, nouveauVendeur.getEmail())) {
+        if (emailExiste(users, this.email)) {
             System.out.println("Erreur : Cet email est déjà utilisé.");
             return;
         }
-        users.add(nouveauVendeur);
-        System.out.println("Vendeur ajouté avec succès : " + nouveauVendeur.getName());
+        users.add(this);
+        System.out.println("Inscription réussie pour le vendeur : " + this.name);
+    }
+
+    @Override
+    public String toJson() {
+        return gson.toJson(this); // Convertir l'objet en JSON
     }
 }
