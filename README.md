@@ -1,14 +1,10 @@
-🎯 Nom du Projet
-
-Une brève description de ton projet ici. Par exemple :
-
-    Application Java qui démontre [fonctionnalité principale] développée avec IntelliJ IDEA.
+🎯 Gestion de stock
 
 🛠️ Technologies utilisées
 
     Java 17 (ou ta version exacte)
     IntelliJ IDEA
-    [Autres outils ou librairies si nécessaire]
+    librairie Gjson
 
 🚀 Lancement du projet
 1. Cloner le dépôt
@@ -35,7 +31,7 @@ Clique sur "Appliquer", puis "OK".
 
 Lance à nouveau ton projet avec le bouton vert ▶️. L’erreur ne devrait plus apparaître ✅.
 
-git clone https://github.com/ton-nom-utilisateur/ton-projet.git
+git clone https://github.com/JONATHAN-BOLIBENGA01/Gestion_De_Stock/edit/gdsAvecJson
 cd ton-projet
 
 About
