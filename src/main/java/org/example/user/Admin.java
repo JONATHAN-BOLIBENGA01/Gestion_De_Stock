@@ -1,8 +1,12 @@
-package user;
+package org.example.user;
+
+import com.google.gson.Gson;
+
 import java.util.List;
 
-class Admin extends User {
+public class Admin extends User {
     private static Admin instance;
+    private Gson gson = new Gson(); // Créer une instance de Gson
 
     private Admin(String name, String email, String password) {
         super(name, email, password);
@@ -23,5 +27,10 @@ class Admin extends User {
     @Override
     public void sInscrire(List<User> users) {
         System.out.println("Erreur : L'admin ne peut pas s'inscrire lui-même.");
+    }
+
+    @Override
+    public String toJson() {
+        return gson.toJson(this); // Convertir l'objet en JSON
     }
 }
