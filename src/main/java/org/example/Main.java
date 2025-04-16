@@ -2,27 +2,17 @@ package org.example;
 
 import org.example.product.GestionStock;
 import org.example.product.Produit;
-import org.example.user.Client;
-import org.example.user.User;
-import org.example.user.Vendeur;
-import org.example.repository.JsonRepository;
+import org.example.user.*;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
 public class Main {
-    private static List<User> utilisateurs = new ArrayList<>();
-    private static List<Produit> inventaire = new ArrayList<>();
     private static GestionStock gestionStock = new GestionStock();
-    private static JsonRepository jsonRepository = new JsonRepository();
     private static Scanner scanner = new Scanner(System.in);
     private static User utilisateurActuel = null;
 
     public static void main(String[] args) {
-        // Initialiser le gestionnaire de stock
-        gestionStock = new GestionStock();
-
         System.out.println("========================================");
         System.out.println("  🎉 BIENVENUE DANS NOTRE APPLICATION  🎉 ");
         System.out.println("========================================");
@@ -31,7 +21,7 @@ public class Main {
         do {
             afficherMenuPrincipal();
             choix = scanner.nextInt();
-            scanner.nextLine(); // Consommer le retour à la ligne
+            scanner.nextLine();
 
             switch (choix) {
                 case 1:
@@ -41,9 +31,6 @@ public class Main {
                     seConnecter();
                     break;
                 case 0:
-                    // Sauvegarder les utilisateurs et produits à la déconnexion
-                    jsonRepository.saveUsers(utilisateurs, "utilisateurs.json");
-                    jsonRepository.saveProducts(gestionStock.afficherProduits(), "produits.json");
                     System.out.println("Merci d'avoir utilisé notre système. À bientôt !");
                     break;
                 default:
@@ -69,7 +56,7 @@ public class Main {
         System.out.print("Mot de passe : ");
         String password = scanner.nextLine();
 
-        if (emailExiste(email)) {
+        if (User.emailExiste(email)) {
             System.out.println("\u26A0️ Cet email est déjà utilisé. Veuillez en choisir un autre.");
             return;
         }
@@ -90,17 +77,7 @@ public class Main {
             return;
         }
 
-        utilisateurs.add(nouvelUtilisateur);
-        System.out.println("✅ Inscription réussie ! Vous pouvez maintenant vous connecter.");
-    }
-
-    private static boolean emailExiste(String email) {
-        for (User user : utilisateurs) {
-            if (user.getEmail().equalsIgnoreCase(email)) {
-                return true;
-            }
-        }
-        return false;
+        nouvelUtilisateur.sInscrire();
     }
 
     private static void seConnecter() {
@@ -110,15 +87,13 @@ public class Main {
         System.out.print("Mot de passe : ");
         String password = scanner.nextLine();
 
-        for (User user : utilisateurs) {
-            if (user.getEmail().equals(email) && user.getPassword().equals(password)) {
-                utilisateurActuel = user;
-                System.out.println("✅ Connexion réussie. Bienvenue, " + user.getName() + "!");
-                afficherMenuUtilisateur();
-                return;
-            }
+        utilisateurActuel = User.seConnecter(email, password);
+        if (utilisateurActuel != null) {
+            System.out.println("✅ Connexion réussie. Bienvenue, " + utilisateurActuel.getName() + "!");
+            afficherMenuUtilisateur();
+        } else {
+            System.out.println("\u26A0️ Email ou mot de passe incorrect. Réessayez.");
         }
-        System.out.println("\u26A0️ Email ou mot de passe incorrect. Réessayez.");
     }
 
     private static void afficherMenuUtilisateur() {
@@ -126,7 +101,7 @@ public class Main {
         do {
             System.out.println("\n==== Menu Utilisateur ====");
             System.out.println("1. Consulter les produits");
-            if (utilisateurActuel instanceof Vendeur) {
+            if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
                 System.out.println("2. Ajouter un produit");
                 System.out.println("3. Mettre à jour un produit");
                 System.out.println("4. Supprimer un produit");
@@ -141,24 +116,24 @@ public class Main {
                     afficherProduits();
                     break;
                 case 2:
-                    if (utilisateurActuel instanceof Vendeur) {
+                    if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
                         ajouterProduit();
                     } else {
-                        System.out.println("\u26A0️ Vous n'avez pas les permissions pour ajouter un produit.");
+                        System.out.println("\u26A0️ Vous n'avez pas les permissions nécessaires.");
                     }
                     break;
                 case 3:
-                    if (utilisateurActuel instanceof Vendeur) {
+                    if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
                         mettreAJourProduit();
                     } else {
-                        System.out.println("\u26A0️ Vous n'avez pas les permissions pour mettre à jour un produit.");
+                        System.out.println("\u26A0️ Vous n'avez pas les permissions nécessaires.");
                     }
                     break;
                 case 4:
-                    if (utilisateurActuel instanceof Vendeur) {
+                    if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
                         supprimerProduit();
                     } else {
-                        System.out.println("\u26A0️ Vous n'avez pas les permissions pour supprimer un produit.");
+                        System.out.println("\u26A0️ Vous n'avez pas les permissions nécessaires.");
                     }
                     break;
                 case 0:
@@ -168,7 +143,7 @@ public class Main {
                 default:
                     System.out.println("Choix invalide. Réessayez.");
             }
-        } while (choix != 0);
+        } while (choix != 0 && utilisateurActuel != null);
     }
 
     private static void ajouterProduit() {
@@ -184,15 +159,12 @@ public class Main {
 
         Produit nouveauProduit = new Produit(nom, prix, quantiteStock, seuilAlerte);
         gestionStock.ajouterProduit(nouveauProduit);
-
-        // Sauvegarder les produits après ajout
-        jsonRepository.saveProducts(gestionStock.afficherProduits(), "produits.json");
     }
 
     private static void mettreAJourProduit() {
         System.out.print("ID du produit à mettre à jour : ");
         Long id = scanner.nextLong();
-        scanner.nextLine(); // Consommer le retour à la ligne
+        scanner.nextLine();
         System.out.print("Nouveau nom : ");
         String nom = scanner.nextLine();
         System.out.print("Nouveau prix : ");
@@ -213,7 +185,7 @@ public class Main {
     private static void supprimerProduit() {
         System.out.print("ID du produit à supprimer : ");
         Long id = scanner.nextLong();
-        scanner.nextLine(); // Consommer le retour à la ligne
+        scanner.nextLine();
 
         gestionStock.supprimerProduit(id);
     }
@@ -225,7 +197,8 @@ public class Main {
         } else {
             System.out.println("\n=== Liste des Produits ===");
             for (Produit p : produits) {
-                System.out.println("ID: " + p.getId() + " | Nom: " + p.getNom() + " | Prix: " + p.getPrix() + " | Stock: " + p.getQuantiteStock());
+                System.out.println("ID: " + p.getId() + " | Nom: " + p.getNom() +
+                        " | Prix: " + p.getPrix() + " | Stock: " + p.getQuantiteStock());
             }
         }
     }

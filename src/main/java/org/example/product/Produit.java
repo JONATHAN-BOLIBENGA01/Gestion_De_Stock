@@ -1,9 +1,8 @@
 package org.example.product;
+
 import java.util.Date;
-import java.util.List;
-import java.util.stream.Collectors;
+
 public class Produit {
-    private static Long nextId = 1L; // Compteur pour les IDs
     private Long id;
     private String nom;
     private float prix;
@@ -11,71 +10,32 @@ public class Produit {
     private int seuilAlerte;
     private Date dateAjout;
 
+    public Produit(Long id, String nom, float prix, int quantiteStock, int seuilAlerte) {
+        this.id = id;
+        this.nom = nom;
+        this.prix = prix;
+        this.quantiteStock = quantiteStock;
+        this.seuilAlerte = seuilAlerte;
+        this.dateAjout = new Date();
+    }
+
     public Produit(String nom, float prix, int quantiteStock, int seuilAlerte) {
-        this.id = nextId++;
-        this.nom = nom;
-        this.prix = prix;
-        this.quantiteStock = quantiteStock;
-        this.seuilAlerte = seuilAlerte;
-        this.dateAjout = new Date(); // Date actuelle par défaut
+        this(null, nom, prix, quantiteStock, seuilAlerte);
     }
 
-    public float getPrix() {
-        return prix;
-    }
-
-    public void setPrix(float prix) {
-        this.prix = prix;
-    }
-
-    public Date getDateAjout() {
-        return dateAjout;
-    }
-
-    public int getSeuilAlerte() {
-        return seuilAlerte;
-    }
-
-    public void setSeuilAlerte(int seuilAlerte) {
-        this.seuilAlerte = seuilAlerte;
-    }
-
-    public int getQuantiteStock() {
-        return quantiteStock;
-    }
-
-    public void setQuantiteStock(int quantiteStock) {
-        this.quantiteStock = quantiteStock;
-    }
-
-    public String getNom() {
-        return nom;
-    }
-
-    public void setNom(String nom) {
-        this.nom = nom;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public static Long getNextId() {
-        return nextId;
-    }
-    public static void ajouterProduit(List<Produit> inventaire, Produit nouveau) {
-        inventaire.add(nouveau);
-    }
-
-    public static boolean supprimerProduit(List<Produit> inventaire, Long id) {
-        return inventaire.removeIf(p -> p.getId().equals(id));
-    }
-
-    public static List<Produit> rechercherParNom(List<Produit> inventaire, String terme) {
-        return inventaire.stream()
-                .filter(p -> p.getNom().toLowerCase().contains(terme.toLowerCase()))
-                .collect(Collectors.toList());
-    }
+    // Getters et setters
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getNom() { return nom; }
+    public void setNom(String nom) { this.nom = nom; }
+    public float getPrix() { return prix; }
+    public void setPrix(float prix) { this.prix = prix; }
+    public int getQuantiteStock() { return quantiteStock; }
+    public void setQuantiteStock(int quantiteStock) { this.quantiteStock = quantiteStock; }
+    public int getSeuilAlerte() { return seuilAlerte; }
+    public void setSeuilAlerte(int seuilAlerte) { this.seuilAlerte = seuilAlerte; }
+    public Date getDateAjout() { return dateAjout; }
+    public void setDateAjout(Date dateAjout) { this.dateAjout = dateAjout; }
 
     public boolean besoinReapprovisionnement() {
         return quantiteStock < seuilAlerte;

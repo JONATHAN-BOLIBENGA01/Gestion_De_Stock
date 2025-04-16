@@ -1,6 +1,7 @@
 package org.example.product;
 
-import java.util.ArrayList;
+import org.example.dao.ProduitDAO;
+
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -8,28 +9,23 @@ public class GestionStock {
     private List<Produit> inventaire;
 
     public GestionStock() {
-        this.inventaire = new ArrayList<>();
+        this.inventaire = ProduitDAO.getAllProduits();
     }
 
-    // Créer
     public void ajouterProduit(Produit p) {
-        inventaire.add(p);
+        ProduitDAO.saveProduit(p);
+        this.inventaire = ProduitDAO.getAllProduits();
         System.out.println("✅ Produit ajouté avec succès !");
     }
 
-    // Lire
     public List<Produit> afficherProduits() {
         return inventaire;
     }
 
     public Produit rechercherProduitParId(Long id) {
-        return inventaire.stream()
-                .filter(p -> p.getId().equals(id))
-                .findFirst()
-                .orElse(null);
+        return ProduitDAO.getProduitById(id);
     }
 
-    // Mettre à jour
     public boolean mettreAJourProduit(Long id, String nom, float prix, int quantiteStock, int seuilAlerte) {
         Produit produit = rechercherProduitParId(id);
         if (produit != null) {
@@ -37,6 +33,8 @@ public class GestionStock {
             produit.setPrix(prix);
             produit.setQuantiteStock(quantiteStock);
             produit.setSeuilAlerte(seuilAlerte);
+            ProduitDAO.saveProduit(produit);
+            this.inventaire = ProduitDAO.getAllProduits();
             System.out.println("✅ Produit mis à jour avec succès !");
             return true;
         }
@@ -44,15 +42,15 @@ public class GestionStock {
         return false;
     }
 
-    // Supprimer
     public boolean supprimerProduit(Long id) {
-        boolean removed = inventaire.removeIf(p -> p.getId().equals(id));
-        if (removed) {
+        boolean success = ProduitDAO.deleteProduit(id);
+        if (success) {
+            this.inventaire = ProduitDAO.getAllProduits();
             System.out.println("✅ Produit supprimé avec succès !");
         } else {
             System.out.println("⚠️ Produit non trouvé !");
         }
-        return removed;
+        return success;
     }
 
     public List<Produit> getProduitsEnAlerte() {
