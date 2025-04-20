@@ -125,7 +125,7 @@ public class Main {
             }
 
             if (utilisateurActuel instanceof Vendeur) {
-                System.out.println("7. Générer une facture");
+                System.out.println("7. Générer et valider une facture");
             }
 
             if (utilisateurActuel instanceof Admin) {
@@ -253,12 +253,12 @@ public class Main {
 
     private static void genererFacture() {
         Vendeur vendeur = (Vendeur) utilisateurActuel;
-        System.out.println("\n=== Générer une facture ===");
+        System.out.println("\n=== Générer et valider une facture ===");
         System.out.print("ID de la commande: ");
         Long commandeId = scanner.nextLong();
         scanner.nextLine();
 
-        vendeur.genererFacture(commandeId);
+        vendeur.genererEtValiderFacture(commandeId);
     }
 
     private static void gererCommandes() {

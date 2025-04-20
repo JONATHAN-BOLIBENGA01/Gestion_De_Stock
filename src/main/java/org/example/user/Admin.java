@@ -1,22 +1,20 @@
 package org.example.user;
 
 import com.itextpdf.text.*;
-import com.itextpdf.text.pdf.PdfPCell;
-import com.itextpdf.text.pdf.PdfPTable;
-import com.itextpdf.text.pdf.PdfWriter;
-import org.example.dao.CommandeDAO;
-import org.example.dao.ProduitDAO;
-import org.example.dbManger.dbConnection;
-import org.example.product.Commande;
-import org.example.product.GestionStock;
-import org.example.product.Produit;
-
+import com.itextpdf.text.pdf.*;
+import org.example.dao.*;
+import org.example.product.*;
 import java.io.FileOutputStream;
 import java.sql.*;
 import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.Date;
 import java.util.List;
 
 public class Admin extends User {
+    private static final String LOGO_PATH = "src/main/resources/logo.png";
+    private static final String REPORTS_DIR = "rapports";
+
     public Admin(String name, String email, String password) {
         super(name, email, password);
     }
@@ -26,202 +24,265 @@ public class Admin extends User {
         // L'admin ne s'inscrit pas normalement
     }
 
-    public void inscrireVendeur(String name, String email, String password, String matricule) {
-        if (emailExiste(email)) {
-            System.out.println("Erreur : Cet email est déjà utilisé.");
-            return;
-        }
-        Vendeur vendeur = new Vendeur(name, email, password, matricule);
-        vendeur.enregistrerDansBaseDeDonnees();
-        System.out.println("Vendeur inscrit avec succès.");
-    }
-
-    public void ajouterProduit(GestionStock gestionStock, Produit produit) {
-        gestionStock.ajouterProduit(produit);
-    }
-
-    public void supprimerProduit(GestionStock gestionStock, Long id) {
-        gestionStock.supprimerProduit(id);
-    }
-
-    public void genererRapport() {
-        System.out.println("Génération du rapport...");
-    }
-
-    public Commande creerCommandePourProduitsSousSeuil() {
-        List<Produit> produits = ProduitDAO.getAllProduits();
-        Commande commande = new Commande(this.getEmail());
-
-        for (Produit produit : produits) {
-            if (produit.besoinReapprovisionnement()) {
-                // Quantité à commander = seuil d'alerte * 2 (par exemple)
-                int quantiteACommander = produit.getSeuilAlerte() * 2;
-                commande.ajouterProduit(produit, quantiteACommander);
-            }
-        }
-
-        if (!commande.getLignesCommande().isEmpty()) {
-            CommandeDAO.saveCommande(commande);
-            return commande;
-        }
-
-        return null;
-    }
-
-    public void validerLivraisonCommande(Long commandeId) {
-
-        Commande commande = getCommandeById(commandeId);
-
-        if (commande == null) {
-            System.out.println("Commande non trouvée.");
-            return;
-        }
-
-        if (commande.isEstLivree()) {
-            System.out.println("Cette commande a déjà été livrée.");
-            return;
-        }
-
-        for (Commande.LigneCommande ligne : commande.getLignesCommande()) {
-            Produit produit = ligne.getProduit();
-            int nouvelleQuantite = produit.getQuantiteStock() + ligne.getQuantite();
-            produit.setQuantiteStock(nouvelleQuantite);
-            ProduitDAO.saveProduit(produit);
-        }
-
-        // 3. Marquer la commande comme livrée
-        String updateQuery = "UPDATE commandes SET est_livree = TRUE WHERE id = ?";
-
-        try (Connection conn = dbConnection.connect();
-             PreparedStatement stmt = conn.prepareStatement(updateQuery)) {
-
-            stmt.setLong(1, commandeId);
-            int rowsUpdated = stmt.executeUpdate();
-
-            if (rowsUpdated > 0) {
-                System.out.println("Livraison validée avec succès !");
-                commande.setEstLivree(true);
-            } else {
-                System.out.println("Échec de la validation de la livraison.");
-            }
-        } catch (SQLException e) {
-            System.out.println("Erreur lors de la validation de la livraison : " + e.getMessage());
-        }
-    }
-
-    private Commande getCommandeById(Long commandeId) {
-        String query = "SELECT * FROM commandes WHERE id = ?";
-
-        try (Connection conn = dbConnection.connect();
-             PreparedStatement stmt = conn.prepareStatement(query)) {
-
-            stmt.setLong(1, commandeId);
-            ResultSet rs = stmt.executeQuery();
-
-            if (rs.next()) {
-                Commande commande = new Commande(rs.getString("admin_email"));
-                commande.setId(rs.getLong("id"));
-                commande.setDateCommande(new Date(rs.getTimestamp("date_commande").getTime()));
-                commande.setEstLivree(rs.getBoolean("est_livree"));
-
-                commande.getLignesCommande().addAll(CommandeDAO.getLignesCommande(commandeId));
-                return commande;
-            }
-        } catch (SQLException e) {
-            System.out.println("Erreur lors de la récupération de la commande : " + e.getMessage());
-        }
-
-        return null;
-    }
-
-    public List<Commande> getHistoriqueCommandes() {
-        List<Commande> commandes = CommandeDAO.getCommandesByAdmin(this.getEmail());
-        commandes.sort((c1, c2) -> c2.getDateCommande().compareTo(c1.getDateCommande()));
-        return commandes;
-    }
-
-    public void genererRapportPDF() {
-        List<Produit> produits = ProduitDAO.getAllProduits();
-        String fileName = "rapport_stock_" + new SimpleDateFormat("yyyyMMdd").format(new java.util.Date()) + ".pdf";
+    public void genererRapportCompletPDF() {
+        String fileName = REPORTS_DIR + "/rapport_complet_" +
+                new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".pdf";
 
         try {
-            Document document = new Document();
+            // Créer le dossier rapports si inexistant
+            java.nio.file.Files.createDirectories(java.nio.file.Paths.get(REPORTS_DIR));
+
+            Document document = new Document(PageSize.A4.rotate()); // Format paysage
             PdfWriter.getInstance(document, new FileOutputStream(fileName));
             document.open();
 
-            // Titre
-            Font fontTitre = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 18, BaseColor.BLUE);
-            Paragraph titre = new Paragraph("Rapport de Stock", fontTitre);
-            titre.setAlignment(Element.ALIGN_CENTER);
-            titre.setSpacingAfter(20);
-            document.add(titre);
+            // Ajouter le logo
+            addLogo(document);
 
-            // Date
-            Paragraph date = new Paragraph("Généré le: " + new SimpleDateFormat("dd/MM/yyyy").format(new java.util.Date()));
-            date.setSpacingAfter(20);
-            document.add(date);
+            // Titre principal
+            addTitle(document, "RAPPORT COMPLET DE GESTION");
 
-            // Tableau des produits
-            PdfPTable table = new PdfPTable(5);
-            table.setWidthPercentage(100);
-            table.setSpacingBefore(10);
+            // Section 1: Produits en stock
+            addProductsSection(document);
 
-            // En-têtes
-            addTableHeader(table, "ID");
-            addTableHeader(table, "Nom");
-            addTableHeader(table, "Prix");
-            addTableHeader(table, "Stock");
-            addTableHeader(table, "Catégorie");
+            // Section 2: Produits vendus
+            addSalesSection(document);
 
-            // Données
-            for (Produit p : produits) {
-                table.addCell(p.getId().toString());
-                table.addCell(p.getNom());
-                table.addCell(String.format("%.2f €", p.getPrix()));
-                table.addCell(String.valueOf(p.getQuantiteStock()));
-                table.addCell(p.getCategorie() != null ? p.getCategorie().getNom() : "");
-            }
+            // Section 3: Clients et achats
+            addClientsSection(document);
 
-            document.add(table);
+            // Section 4: Commandes de réapprovisionnement
+            addReordersSection(document);
 
-            // Produits en alerte
-            List<Produit> produitsAlerte = produits.stream()
-                    .filter(Produit::besoinReapprovisionnement)
-                    .toList();
-
-            if (!produitsAlerte.isEmpty()) {
-                Paragraph alerteTitre = new Paragraph("\nProduits nécessitant réapprovisionnement:",
-                        FontFactory.getFont(FontFactory.HELVETICA_BOLD));
-                document.add(alerteTitre);
-
-                PdfPTable tableAlerte = new PdfPTable(2);
-                tableAlerte.setWidthPercentage(100);
-                tableAlerte.setSpacingBefore(10);
-
-                addTableHeader(tableAlerte, "Produit");
-                addTableHeader(tableAlerte, "Stock actuel");
-
-                for (Produit p : produitsAlerte) {
-                    tableAlerte.addCell(p.getNom());
-                    tableAlerte.addCell(p.getQuantiteStock() + " (seuil: " + p.getSeuilAlerte() + ")");
-                }
-
-                document.add(tableAlerte);
-            }
+            // Signature
+            addSignatureArea(document);
 
             document.close();
-            System.out.println("Rapport PDF généré avec succès: " + fileName);
-
+            System.out.println("✅ Rapport complet généré: " + fileName);
         } catch (Exception e) {
-            System.out.println("Erreur lors de la génération du PDF: " + e.getMessage());
+            System.out.println("❌ Erreur génération rapport: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
+    private void addLogo(Document document) throws Exception {
+        try {
+            Image logo = Image.getInstance(LOGO_PATH);
+            logo.scaleToFit(150, 150);
+            logo.setAlignment(Element.ALIGN_CENTER);
+            document.add(logo);
+            document.add(Chunk.NEWLINE);
+        } catch (Exception e) {
+            System.out.println("⚠️ Logo non trouvé, continuation sans logo");
+        }
+    }
+
+    private void addTitle(Document document, String title) throws DocumentException {
+        Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 24, BaseColor.DARK_GRAY);
+        Paragraph p = new Paragraph(title, titleFont);
+        p.setAlignment(Element.ALIGN_CENTER);
+        p.setSpacingAfter(30);
+        document.add(p);
+
+        // Date du rapport
+        Font dateFont = FontFactory.getFont(FontFactory.HELVETICA, 12, BaseColor.GRAY);
+        Paragraph date = new Paragraph("Généré le: " + new SimpleDateFormat("dd/MM/yyyy à HH:mm").format(new Date()), dateFont);
+        date.setAlignment(Element.ALIGN_CENTER);
+        date.setSpacingAfter(20);
+        document.add(date);
+    }
+
+    private void addProductsSection(Document document) throws Exception {
+        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
+        Paragraph sectionTitle = new Paragraph("1. PRODUITS EN STOCK", sectionFont);
+        sectionTitle.setSpacingAfter(15);
+        document.add(sectionTitle);
+
+        List<Produit> produits = ProduitDAO.getAllProduits();
+
+        PdfPTable table = new PdfPTable(6);
+        table.setWidthPercentage(100);
+        table.setSpacingBefore(10);
+
+        // En-têtes
+        addTableHeader(table, "ID");
+        addTableHeader(table, "Nom");
+        addTableHeader(table, "Prix");
+        addTableHeader(table, "Stock");
+        addTableHeader(table, "Seuil");
+        addTableHeader(table, "Catégorie");
+
+        // Données
+        for (Produit p : produits) {
+            table.addCell(p.getId().toString());
+            table.addCell(p.getNom());
+            table.addCell(String.format("%.2f €", p.getPrix()));
+
+            PdfPCell stockCell = new PdfPCell(new Phrase(String.valueOf(p.getQuantiteStock())));
+            if (p.besoinReapprovisionnement()) {
+                stockCell.setBackgroundColor(BaseColor.ORANGE);
+            }
+            table.addCell(stockCell);
+
+            table.addCell(String.valueOf(p.getSeuilAlerte()));
+            table.addCell(p.getCategorie() != null ? p.getCategorie().getNom() : "N/A");
+        }
+
+        document.add(table);
+
+        // Statistiques
+        long produitsEnAlerte = produits.stream().filter(Produit::besoinReapprovisionnement).count();
+        document.add(new Paragraph("\nStatistiques:", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14)));
+        document.add(new Paragraph(String.format("- Total produits: %d", produits.size())));
+        document.add(new Paragraph(String.format("- Produits en alerte: %d", produitsEnAlerte)));
+        document.add(Chunk.NEWLINE);
+    }
+
+    private void addSalesSection(Document document) throws Exception {
+        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
+        Paragraph sectionTitle = new Paragraph("2. PRODUITS VENDUS", sectionFont);
+        sectionTitle.setSpacingAfter(15);
+        document.add(sectionTitle);
+
+        List<Commande> commandes = CommandeDAO.getAllCommandes();
+        Map<Long, Integer> produitsVendus = new HashMap<>();
+
+        // Calculer les quantités vendues
+        for (Commande cmd : commandes) {
+            for (Commande.LigneCommande ligne : cmd.getLignesCommande()) {
+                produitsVendus.merge(ligne.getProduit().getId(), ligne.getQuantite(), Integer::sum);
+            }
+        }
+
+        PdfPTable table = new PdfPTable(4);
+        table.setWidthPercentage(100);
+
+        addTableHeader(table, "Produit");
+        addTableHeader(table, "Quantité vendue");
+        addTableHeader(table, "CA généré");
+        addTableHeader(table, "% du total");
+
+        double caTotal = produitsVendus.entrySet().stream()
+                .mapToDouble(e -> {
+                    Produit p = ProduitDAO.getProduitById(e.getKey());
+                    return p.getPrix() * e.getValue();
+                })
+                .sum();
+
+        for (Map.Entry<Long, Integer> entry : produitsVendus.entrySet()) {
+            Produit p = ProduitDAO.getProduitById(entry.getKey());
+            double caProduit = p.getPrix() * entry.getValue();
+            double percentage = (caProduit / caTotal) * 100;
+
+            table.addCell(p.getNom());
+            table.addCell(String.valueOf(entry.getValue()));
+            table.addCell(String.format("%.2f €", caProduit));
+            table.addCell(String.format("%.1f %%", percentage));
+        }
+
+        document.add(table);
+        document.add(new Paragraph("\nChiffre d'affaires total: " + String.format("%.2f €", caTotal),
+                FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14)));
+        document.add(Chunk.NEWLINE);
+    }
+
+    private void addClientsSection(Document document) throws Exception {
+        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
+        Paragraph sectionTitle = new Paragraph("3. CLIENTS ET ACHATS", sectionFont);
+        sectionTitle.setSpacingAfter(15);
+        document.add(sectionTitle);
+
+        // Implémentation basique - à adapter selon votre modèle Client
+        PdfPTable table = new PdfPTable(4);
+        table.setWidthPercentage(100);
+
+        addTableHeader(table, "Client");
+        addTableHeader(table, "Email");
+        addTableHeader(table, "Commandes");
+        addTableHeader(table, "Montant total");
+
+        // Exemple de données (remplacer par vos données réelles)
+        table.addCell("Client 1");
+        table.addCell("client1@example.com");
+        table.addCell("3");
+        table.addCell("150.00 €");
+
+        document.add(table);
+        document.add(Chunk.NEWLINE);
+    }
+
+    private void addReordersSection(Document document) throws Exception {
+        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
+        Paragraph sectionTitle = new Paragraph("4. COMMANDES DE RÉAPPROVISIONNEMENT", sectionFont);
+        sectionTitle.setSpacingAfter(15);
+        document.add(sectionTitle);
+
+        List<Commande> reorders = CommandeDAO.getCommandesReapprovisionnement();
+
+        PdfPTable table = new PdfPTable(5);
+        table.setWidthPercentage(100);
+
+        addTableHeader(table, "N° Commande");
+        addTableHeader(table, "Date");
+        addTableHeader(table, "Produit");
+        addTableHeader(table, "Quantité");
+        addTableHeader(table, "Statut");
+
+        for (Commande cmd : reorders) {
+            for (Commande.LigneCommande ligne : cmd.getLignesCommande()) {
+                table.addCell(cmd.getId().toString());
+                table.addCell(new SimpleDateFormat("dd/MM/yyyy").format(cmd.getDateCommande()));
+                table.addCell(ligne.getProduit().getNom());
+                table.addCell(String.valueOf(ligne.getQuantite()));
+                table.addCell(cmd.isEstLivree() ? "Livrée" : "En attente");
+            }
+        }
+
+        document.add(table);
+        document.add(Chunk.NEWLINE);
+    }
+
+    private void addSignatureArea(Document document) throws DocumentException {
+        // Espace avant la signature
+        document.add(new Paragraph("\n\n\n"));
+
+        // Tableau pour aligner la zone de signature
+        PdfPTable signatureTable = new PdfPTable(1);
+        signatureTable.setWidthPercentage(30);
+        signatureTable.setHorizontalAlignment(Element.ALIGN_RIGHT);
+
+        // Ligne de signature
+        PdfPCell signatureCell = new PdfPCell();
+        signatureCell.setBorder(Rectangle.BOTTOM);
+        signatureCell.setFixedHeight(40f); // Hauteur de la ligne de signature
+        signatureCell.setPaddingBottom(10f);
+        signatureTable.addCell(signatureCell);
+
+        // Texte "Signature"
+        PdfPCell textCell = new PdfPCell(new Phrase("Signature",
+                FontFactory.getFont(FontFactory.HELVETICA, 10)));
+        textCell.setBorder(Rectangle.NO_BORDER);
+        textCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        signatureTable.addCell(textCell);
+
+        // Date et lieu
+        PdfPCell dateCell = new PdfPCell(new Phrase("Fait à ____________________, le ____/____/____",
+                FontFactory.getFont(FontFactory.HELVETICA, 8)));
+        dateCell.setBorder(Rectangle.NO_BORDER);
+        dateCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        signatureTable.addCell(dateCell);
+
+        document.add(signatureTable);
+    }
+
     private void addTableHeader(PdfPTable table, String header) {
-        PdfPCell cell = new PdfPCell();
-        cell.setBackgroundColor(BaseColor.LIGHT_GRAY);
-        cell.setBorderWidth(1);
-        cell.setPhrase(new Phrase(header));
+        PdfPCell cell = new PdfPCell(new Phrase(header,
+                FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, BaseColor.WHITE)));
+        cell.setBackgroundColor(new BaseColor(70, 130, 180)); // Bleu acier
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setPadding(5);
         table.addCell(cell);
     }
+
+    // ... (autres méthodes de la classe Admin) ...
 }

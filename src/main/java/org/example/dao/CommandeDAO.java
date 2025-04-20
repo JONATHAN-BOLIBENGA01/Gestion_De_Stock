@@ -146,7 +146,20 @@ public class CommandeDAO {
                 lignes.add(new Commande.LigneCommande(produit, quantite));
             }
         }
-
         return lignes;
+    }
+    public static String getClientEmailForCommande(Long commandeId) {
+        String query = "SELECT admin_email FROM commandes WHERE id = ?";
+        try (Connection conn = dbConnection.connect();
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setLong(1, commandeId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString("admin_email");
+            }
+        } catch (SQLException e) {
+            System.out.println("Erreur récupération email client: " + e.getMessage());
+        }
+        return null;
     }
 }

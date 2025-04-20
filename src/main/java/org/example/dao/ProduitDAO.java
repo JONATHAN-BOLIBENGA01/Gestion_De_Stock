@@ -23,8 +23,7 @@ public class ProduitDAO {
                     (vendeurEmail != null ? ", vendeur_email" : "") + ") VALUES (?, ?, ?, ?, ?, ?" +
                     (vendeurEmail != null ? ", ?" : "") + ")";
         } else {
-            query = "UPDATE produtos SET nom = ?, prix = ?, quantite_stock = ?, seuil_alerte = ?, categorie_id = ?" +
-                    (vendeurEmail != null ? ", vendeur_email = ?" : "") + " WHERE id = ?";
+            query = "UPDATE produits SET nom = ?, prix = ?, quantite_stock = ?, seuil_alerte = ?, categorie_id = ? WHERE id = ?";
         }
 
         try (Connection conn = dbConnection.connect();
