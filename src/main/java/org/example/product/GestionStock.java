@@ -13,7 +13,15 @@ public class GestionStock {
     }
 
     public void ajouterProduit(Produit p) {
-        ProduitDAO.saveProduit(p);
+        ajouterProduit(p, null);
+    }
+
+    public void ajouterProduit(Produit p, String vendeurEmail) {
+        if (vendeurEmail != null) {
+            ProduitDAO.saveProduit(p, vendeurEmail);
+        } else {
+            ProduitDAO.saveProduit(p);
+        }
         this.inventaire = ProduitDAO.getAllProduits();
         System.out.println("✅ Produit ajouté avec succès !");
     }
@@ -33,7 +41,15 @@ public class GestionStock {
             produit.setPrix(prix);
             produit.setQuantiteStock(quantiteStock);
             produit.setSeuilAlerte(seuilAlerte);
-            ProduitDAO.saveProduit(produit);
+
+            // Récupérer l'email du vendeur existant
+            String vendeurEmail = ProduitDAO.getVendeurEmailForProduit(id);
+            if (vendeurEmail != null) {
+                ProduitDAO.saveProduit(produit, vendeurEmail);
+            } else {
+                ProduitDAO.saveProduit(produit);
+            }
+
             this.inventaire = ProduitDAO.getAllProduits();
             System.out.println("✅ Produit mis à jour avec succès !");
             return true;

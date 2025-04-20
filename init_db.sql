@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS produits (
     seuil_alerte INTEGER NOT NULL,
     date_ajout DATE NOT NULL
 );
+-- Table Categories
+CREATE TABLE categories (
+    id SERIAL PRIMARY KEY,
+    nom VARCHAR(255) NOT NULL
+);
+
 
 -- Insérer un admin par défaut
 INSERT INTO users (name, email, password, role)

@@ -7,20 +7,22 @@ public class Produit {
     private String nom;
     private float prix;
     private int quantiteStock;
+    private Categorie categorie;
     private int seuilAlerte;
     private Date dateAjout;
 
-    public Produit(Long id, String nom, float prix, int quantiteStock, int seuilAlerte) {
+    public Produit(Long id, String nom, float prix, int quantiteStock, int seuilAlerte, Categorie categorie) {
         this.id = id;
         this.nom = nom;
         this.prix = prix;
         this.quantiteStock = quantiteStock;
+        this.categorie = categorie;
         this.seuilAlerte = seuilAlerte;
         this.dateAjout = new Date();
     }
 
-    public Produit(String nom, float prix, int quantiteStock, int seuilAlerte) {
-        this(null, nom, prix, quantiteStock, seuilAlerte);
+    public Produit(String nom, float prix, int quantiteStock, int seuilAlerte, Categorie categorie) {
+        this(null, nom, prix, quantiteStock, seuilAlerte, categorie);
     }
 
     // Getters et setters
@@ -36,6 +38,13 @@ public class Produit {
     public void setSeuilAlerte(int seuilAlerte) { this.seuilAlerte = seuilAlerte; }
     public Date getDateAjout() { return dateAjout; }
     public void setDateAjout(Date dateAjout) { this.dateAjout = dateAjout; }
+    public Categorie getCategorie() {
+        return categorie;
+    }
+
+    public void setCategorie(Categorie categorie) {
+        this.categorie = categorie;
+    }
 
     public boolean besoinReapprovisionnement() {
         return quantiteStock < seuilAlerte;
