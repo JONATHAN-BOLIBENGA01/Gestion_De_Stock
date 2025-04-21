@@ -3,17 +3,23 @@ package org.example.user;
 import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
 import org.example.dao.*;
+import org.example.dbManger.dbConnection;
 import org.example.product.*;
 import java.io.FileOutputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.sql.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class Admin extends User {
     private static final String LOGO_PATH = "src/main/resources/logo.png";
     private static final String REPORTS_DIR = "rapports";
+    private static final AtomicInteger invoiceCounter = new AtomicInteger(1000);
 
     public Admin(String name, String email, String password) {
         super(name, email, password);
@@ -21,102 +27,148 @@ public class Admin extends User {
 
     @Override
     public void sInscrire() {
-        // L'admin ne s'inscrit pas normalement
+        System.out.println("admin deja inscrit");
     }
 
+    // Gestion des produits
+    public void ajouterProduit(Produit produit, String vendeurEmail) {
+        ProduitDAO.saveProduit(produit, vendeurEmail);
+    }
+
+    public void mettreAJourProduit(Long id, String nom, float prix, int quantiteStock, int seuilAlerte) {
+        Produit produit = ProduitDAO.getProduitById(id);
+        if (produit != null) {
+            produit.setNom(nom);
+            produit.setPrix(prix);
+            produit.setQuantiteStock(quantiteStock);
+            produit.setSeuilAlerte(seuilAlerte);
+            ProduitDAO.saveProduit(produit, ProduitDAO.getVendeurEmailForProduit(id));
+        }
+    }
+
+    public boolean supprimerProduit(Long id) {
+        return ProduitDAO.deleteProduit(id);
+    }
+
+    // Gestion des commandes
+    public Commande creerCommandePourProduitsSousSeuil() {
+        List<Produit> produits = ProduitDAO.getAllProduits();
+        Commande commande = new Commande(this.getEmail());
+
+        for (Produit produit : produits) {
+            if (produit.besoinReapprovisionnement()) {
+                int quantiteACommander = produit.getSeuilAlerte() * 2;
+                commande.ajouterProduit(produit, quantiteACommander);
+            }
+        }
+
+        if (!commande.getLignesCommande().isEmpty()) {
+            CommandeDAO.saveCommande(commande);
+            return commande;
+        }
+        return null;
+    }
+
+    public void validerLivraisonCommande(Long commandeId) {
+        try (Connection conn = dbConnection.connect()) {
+            conn.setAutoCommit(false);
+
+            Commande commande = getCommandeById(commandeId, conn);
+            if (commande == null) {
+                System.out.println("Commande non trouvée");
+                return;
+            }
+
+            for (Commande.LigneCommande ligne : commande.getLignesCommande()) {
+                Produit produit = ligne.getProduit();
+                produit.setQuantiteStock(produit.getQuantiteStock() + ligne.getQuantite());
+                ProduitDAO.saveProduit(produit, String.valueOf(conn));
+            }
+
+            String updateQuery = "UPDATE commandes SET est_livree = TRUE WHERE id = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(updateQuery)) {
+                stmt.setLong(1, commandeId);
+                stmt.executeUpdate();
+            }
+
+            conn.commit();
+            System.out.println("✅ Livraison validée avec succès !");
+        } catch (SQLException e) {
+            System.out.println("❌ Erreur validation livraison: " + e.getMessage());
+        }
+    }
+
+    // Génération de rapports
     public void genererRapportCompletPDF() {
-        String fileName = REPORTS_DIR + "/rapport_complet_" +
-                new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()) + ".pdf";
+        String fileName = REPORTS_DIR + "/rapport_" + new SimpleDateFormat("yyyyMMdd_HHmm").format(new Date()) + ".pdf";
 
         try {
-            // Créer le dossier rapports si inexistant
-            java.nio.file.Files.createDirectories(java.nio.file.Paths.get(REPORTS_DIR));
+            Files.createDirectories(Paths.get(REPORTS_DIR));
 
-            Document document = new Document(PageSize.A4.rotate()); // Format paysage
+            Document document = new Document(PageSize.A4.rotate());
             PdfWriter.getInstance(document, new FileOutputStream(fileName));
             document.open();
 
-            // Ajouter le logo
             addLogo(document);
+            addTitle(document, "RAPPORT COMPLET");
 
-            // Titre principal
-            addTitle(document, "RAPPORT COMPLET DE GESTION");
-
-            // Section 1: Produits en stock
-            addProductsSection(document);
-
-            // Section 2: Produits vendus
-            addSalesSection(document);
-
-            // Section 3: Clients et achats
+            addProduitsSection(document);
+            addVentesSection(document);
             addClientsSection(document);
+            addReapproSection(document);
 
-            // Section 4: Commandes de réapprovisionnement
-            addReordersSection(document);
-
-            // Signature
             addSignatureArea(document);
 
             document.close();
-            System.out.println("✅ Rapport complet généré: " + fileName);
+            System.out.println("✅ Rapport généré: " + fileName);
         } catch (Exception e) {
             System.out.println("❌ Erreur génération rapport: " + e.getMessage());
-            e.printStackTrace();
         }
     }
+
 
     private void addLogo(Document document) throws Exception {
         try {
             Image logo = Image.getInstance(LOGO_PATH);
-            logo.scaleToFit(150, 150);
+            logo.scaleToFit(120, 120);
             logo.setAlignment(Element.ALIGN_CENTER);
             document.add(logo);
-            document.add(Chunk.NEWLINE);
         } catch (Exception e) {
-            System.out.println("⚠️ Logo non trouvé, continuation sans logo");
+            System.out.println("⚠️ Logo non trouvé");
         }
     }
 
     private void addTitle(Document document, String title) throws DocumentException {
-        Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 24, BaseColor.DARK_GRAY);
-        Paragraph p = new Paragraph(title, titleFont);
+        Font font = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20, BaseColor.DARK_GRAY);
+        Paragraph p = new Paragraph(title, font);
         p.setAlignment(Element.ALIGN_CENTER);
-        p.setSpacingAfter(30);
+        p.setSpacingAfter(20);
         document.add(p);
 
-        // Date du rapport
-        Font dateFont = FontFactory.getFont(FontFactory.HELVETICA, 12, BaseColor.GRAY);
-        Paragraph date = new Paragraph("Généré le: " + new SimpleDateFormat("dd/MM/yyyy à HH:mm").format(new Date()), dateFont);
+        Paragraph date = new Paragraph("Généré le: " + new SimpleDateFormat("dd/MM/yyyy 'à' HH:mm").format(new Date()));
         date.setAlignment(Element.ALIGN_CENTER);
-        date.setSpacingAfter(20);
         document.add(date);
     }
 
-    private void addProductsSection(Document document) throws Exception {
-        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
-        Paragraph sectionTitle = new Paragraph("1. PRODUITS EN STOCK", sectionFont);
-        sectionTitle.setSpacingAfter(15);
-        document.add(sectionTitle);
-
-        List<Produit> produits = ProduitDAO.getAllProduits();
+    private void addProduitsSection(Document document) throws Exception {
+        Font font = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
+        document.add(new Paragraph("\n1. PRODUITS EN STOCK", font));
 
         PdfPTable table = new PdfPTable(6);
         table.setWidthPercentage(100);
-        table.setSpacingBefore(10);
 
-        // En-têtes
         addTableHeader(table, "ID");
         addTableHeader(table, "Nom");
         addTableHeader(table, "Prix");
         addTableHeader(table, "Stock");
         addTableHeader(table, "Seuil");
-        addTableHeader(table, "Catégorie");
+        addTableHeader(table, "Vendeur");
 
-        // Données
+        List<Produit> produits = ProduitDAO.getAllProduits();
         for (Produit p : produits) {
             table.addCell(p.getId().toString());
             table.addCell(p.getNom());
-            table.addCell(String.format("%.2f €", p.getPrix()));
+            table.addCell(String.format("%.2f€", p.getPrix()));
 
             PdfPCell stockCell = new PdfPCell(new Phrase(String.valueOf(p.getQuantiteStock())));
             if (p.besoinReapprovisionnement()) {
@@ -125,164 +177,157 @@ public class Admin extends User {
             table.addCell(stockCell);
 
             table.addCell(String.valueOf(p.getSeuilAlerte()));
-            table.addCell(p.getCategorie() != null ? p.getCategorie().getNom() : "N/A");
+            table.addCell(ProduitDAO.getVendeurEmailForProduit(p.getId()));
         }
 
         document.add(table);
-
-        // Statistiques
-        long produitsEnAlerte = produits.stream().filter(Produit::besoinReapprovisionnement).count();
-        document.add(new Paragraph("\nStatistiques:", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14)));
-        document.add(new Paragraph(String.format("- Total produits: %d", produits.size())));
-        document.add(new Paragraph(String.format("- Produits en alerte: %d", produitsEnAlerte)));
-        document.add(Chunk.NEWLINE);
     }
 
-    private void addSalesSection(Document document) throws Exception {
-        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
-        Paragraph sectionTitle = new Paragraph("2. PRODUITS VENDUS", sectionFont);
-        sectionTitle.setSpacingAfter(15);
-        document.add(sectionTitle);
-
-        List<Commande> commandes = CommandeDAO.getAllCommandes();
-        Map<Long, Integer> produitsVendus = new HashMap<>();
-
-        // Calculer les quantités vendues
-        for (Commande cmd : commandes) {
-            for (Commande.LigneCommande ligne : cmd.getLignesCommande()) {
-                produitsVendus.merge(ligne.getProduit().getId(), ligne.getQuantite(), Integer::sum);
-            }
-        }
+    private void addVentesSection(Document document) throws Exception {
+        Font font = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
+        document.add(new Paragraph("\n2. VENTES", font));
 
         PdfPTable table = new PdfPTable(4);
         table.setWidthPercentage(100);
 
         addTableHeader(table, "Produit");
-        addTableHeader(table, "Quantité vendue");
-        addTableHeader(table, "CA généré");
-        addTableHeader(table, "% du total");
+        addTableHeader(table, "Quantité");
+        addTableHeader(table, "Prix U.");
+        addTableHeader(table, "Total");
 
-        double caTotal = produitsVendus.entrySet().stream()
-                .mapToDouble(e -> {
-                    Produit p = ProduitDAO.getProduitById(e.getKey());
-                    return p.getPrix() * e.getValue();
-                })
-                .sum();
+        List<Commande> commandes = CommandeDAO.getCommandesByAdmin(this.getEmail());
+        Map<Long, Integer> ventes = new HashMap<>();
 
-        for (Map.Entry<Long, Integer> entry : produitsVendus.entrySet()) {
+        for (Commande cmd : commandes) {
+            for (Commande.LigneCommande l : cmd.getLignesCommande()) {
+                ventes.merge(l.getProduit().getId(), l.getQuantite(), Integer::sum);
+            }
+        }
+
+        double caTotal = 0;
+        for (Map.Entry<Long, Integer> entry : ventes.entrySet()) {
             Produit p = ProduitDAO.getProduitById(entry.getKey());
-            double caProduit = p.getPrix() * entry.getValue();
-            double percentage = (caProduit / caTotal) * 100;
+            double total = p.getPrix() * entry.getValue();
+            caTotal += total;
 
             table.addCell(p.getNom());
             table.addCell(String.valueOf(entry.getValue()));
-            table.addCell(String.format("%.2f €", caProduit));
-            table.addCell(String.format("%.1f %%", percentage));
+            table.addCell(String.format("%.2f€", p.getPrix()));
+            table.addCell(String.format("%.2f€", total));
         }
 
         document.add(table);
-        document.add(new Paragraph("\nChiffre d'affaires total: " + String.format("%.2f €", caTotal),
+        document.add(new Paragraph(String.format("\nChiffre d'affaires total: %.2f€", caTotal),
                 FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14)));
-        document.add(Chunk.NEWLINE);
     }
 
     private void addClientsSection(Document document) throws Exception {
-        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
-        Paragraph sectionTitle = new Paragraph("3. CLIENTS ET ACHATS", sectionFont);
-        sectionTitle.setSpacingAfter(15);
-        document.add(sectionTitle);
+        Font font = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
+        document.add(new Paragraph("\n3. CLIENTS", font));
 
-        // Implémentation basique - à adapter selon votre modèle Client
-        PdfPTable table = new PdfPTable(4);
+        PdfPTable table = new PdfPTable(3);
         table.setWidthPercentage(100);
 
-        addTableHeader(table, "Client");
         addTableHeader(table, "Email");
         addTableHeader(table, "Commandes");
-        addTableHeader(table, "Montant total");
+        addTableHeader(table, "Dépenses");
 
-        // Exemple de données (remplacer par vos données réelles)
-        table.addCell("Client 1");
-        table.addCell("client1@example.com");
-        table.addCell("3");
-        table.addCell("150.00 €");
+        Map<String, ClientStats> clients = new HashMap<>();
+        List<Commande> commandes = CommandeDAO.getCommandesByAdmin(this.getEmail());
+
+        for (Commande cmd : commandes) {
+            ClientStats stats = clients.computeIfAbsent(cmd.getAdminEmail(), k -> new ClientStats());
+            stats.commandes++;
+            stats.montantTotal += cmd.calculerTotal();
+        }
+
+        for (Map.Entry<String, ClientStats> entry : clients.entrySet()) {
+            table.addCell(entry.getKey());
+            table.addCell(String.valueOf(entry.getValue().commandes));
+            table.addCell(String.format("%.2f€", entry.getValue().montantTotal));
+        }
 
         document.add(table);
-        document.add(Chunk.NEWLINE);
     }
 
-    private void addReordersSection(Document document) throws Exception {
-        Font sectionFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
-        Paragraph sectionTitle = new Paragraph("4. COMMANDES DE RÉAPPROVISIONNEMENT", sectionFont);
-        sectionTitle.setSpacingAfter(15);
-        document.add(sectionTitle);
-
-        List<Commande> reorders = CommandeDAO.getCommandesReapprovisionnement();
+    private void addReapproSection(Document document) throws Exception {
+        Font font = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, BaseColor.BLUE);
+        document.add(new Paragraph("\n4. RÉAPPROVISIONNEMENTS", font));
 
         PdfPTable table = new PdfPTable(5);
         table.setWidthPercentage(100);
 
-        addTableHeader(table, "N° Commande");
+        addTableHeader(table, "N°");
         addTableHeader(table, "Date");
         addTableHeader(table, "Produit");
         addTableHeader(table, "Quantité");
         addTableHeader(table, "Statut");
 
-        for (Commande cmd : reorders) {
-            for (Commande.LigneCommande ligne : cmd.getLignesCommande()) {
-                table.addCell(cmd.getId().toString());
-                table.addCell(new SimpleDateFormat("dd/MM/yyyy").format(cmd.getDateCommande()));
-                table.addCell(ligne.getProduit().getNom());
-                table.addCell(String.valueOf(ligne.getQuantite()));
-                table.addCell(cmd.isEstLivree() ? "Livrée" : "En attente");
+        List<Commande> commandes = CommandeDAO.getCommandesByAdmin(this.getEmail());
+        for (Commande cmd : commandes) {
+            for (Commande.LigneCommande l : cmd.getLignesCommande()) {
+                if (l.getProduit().besoinReapprovisionnement()) {
+                    table.addCell(cmd.getId().toString());
+                    table.addCell(new SimpleDateFormat("dd/MM/yyyy").format(cmd.getDateCommande()));
+                    table.addCell(l.getProduit().getNom());
+                    table.addCell(String.valueOf(l.getQuantite()));
+                    table.addCell(cmd.isEstLivree() ? "Livré" : "En attente");
+                }
             }
         }
 
         document.add(table);
-        document.add(Chunk.NEWLINE);
     }
 
     private void addSignatureArea(Document document) throws DocumentException {
-        // Espace avant la signature
-        document.add(new Paragraph("\n\n\n"));
+        PdfPTable table = new PdfPTable(1);
+        table.setWidthPercentage(30);
+        table.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        table.setSpacingBefore(40);
 
-        // Tableau pour aligner la zone de signature
-        PdfPTable signatureTable = new PdfPTable(1);
-        signatureTable.setWidthPercentage(30);
-        signatureTable.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        PdfPCell cell = new PdfPCell();
+        cell.setBorder(Rectangle.BOTTOM);
+        cell.setFixedHeight(40);
+        table.addCell(cell);
 
-        // Ligne de signature
-        PdfPCell signatureCell = new PdfPCell();
-        signatureCell.setBorder(Rectangle.BOTTOM);
-        signatureCell.setFixedHeight(40f); // Hauteur de la ligne de signature
-        signatureCell.setPaddingBottom(10f);
-        signatureTable.addCell(signatureCell);
-
-        // Texte "Signature"
         PdfPCell textCell = new PdfPCell(new Phrase("Signature",
                 FontFactory.getFont(FontFactory.HELVETICA, 10)));
         textCell.setBorder(Rectangle.NO_BORDER);
         textCell.setHorizontalAlignment(Element.ALIGN_CENTER);
-        signatureTable.addCell(textCell);
+        table.addCell(textCell);
 
-        // Date et lieu
-        PdfPCell dateCell = new PdfPCell(new Phrase("Fait à ____________________, le ____/____/____",
-                FontFactory.getFont(FontFactory.HELVETICA, 8)));
-        dateCell.setBorder(Rectangle.NO_BORDER);
-        dateCell.setHorizontalAlignment(Element.ALIGN_CENTER);
-        signatureTable.addCell(dateCell);
-
-        document.add(signatureTable);
+        document.add(table);
     }
 
     private void addTableHeader(PdfPTable table, String header) {
         PdfPCell cell = new PdfPCell(new Phrase(header,
                 FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, BaseColor.WHITE)));
-        cell.setBackgroundColor(new BaseColor(70, 130, 180)); // Bleu acier
+        cell.setBackgroundColor(new BaseColor(70, 130, 180));
         cell.setHorizontalAlignment(Element.ALIGN_CENTER);
         cell.setPadding(5);
         table.addCell(cell);
     }
 
-    // ... (autres méthodes de la classe Admin) ...
+    private Commande getCommandeById(Long commandeId, Connection conn) throws SQLException {
+        String query = "SELECT * FROM commandes WHERE id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setLong(1, commandeId);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                Commande commande = new Commande(rs.getString("admin_email"));
+                commande.setId(rs.getLong("id"));
+                commande.setDateCommande(new Date(rs.getTimestamp("date_commande").getTime()));
+                commande.setEstLivree(rs.getBoolean("est_livree"));
+                commande.getLignesCommande().addAll(CommandeDAO.getLignesCommande(commandeId, conn));
+                return commande;
+            }
+        }
+        return null;
+    }
+
+    private static class ClientStats {
+        int commandes = 0;
+        double montantTotal = 0;
+    }
 }

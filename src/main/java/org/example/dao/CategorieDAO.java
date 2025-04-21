@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CategorieDAO {
-    public static void saveCategorie(Categorie cat) {
+    public static boolean saveCategorie(Categorie cat) {
         String query = "INSERT INTO categories (nom) VALUES (?)";
         try (Connection conn = dbConnection.connect();
              PreparedStatement stmt = conn.prepareStatement(query)) {
@@ -17,6 +17,7 @@ public class CategorieDAO {
         } catch (SQLException e) {
             System.out.println("Erreur ajout catégorie : " + e.getMessage());
         }
+        return false;
     }
 
     public static List<Categorie> getAllCategories() {

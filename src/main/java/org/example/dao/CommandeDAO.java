@@ -67,7 +67,7 @@ public class CommandeDAO {
                 commande.setId(rs.getLong("id"));
                 commande.setDateCommande(new Date(rs.getTimestamp("date_commande").getTime()));
                 commande.setEstLivree(rs.getBoolean("est_livree"));
-                commande.getLignesCommande().addAll(getLignesCommande(commande.getId()));
+                commande.getLignesCommande().addAll(getLignesCommande(commande.getId(), conn));
                 commandes.add(commande);
             }
         } catch (SQLException e) {
@@ -77,11 +77,11 @@ public class CommandeDAO {
         return commandes;
     }
 
-    public static List<Commande.LigneCommande> getLignesCommande(Long commandeId) throws SQLException {
+    public static List<Commande.LigneCommande> getLignesCommande(Long commandeId, Connection conn) throws SQLException {
         List<Commande.LigneCommande> lignes = new ArrayList<>();
         String query = "SELECT lc.*, p.* FROM lignes_commande lc JOIN produits p ON lc.produit_id = p.id WHERE lc.commande_id = ?";
 
-        try (Connection conn = dbConnection.connect();
+        try (
              PreparedStatement stmt = conn.prepareStatement(query)) {
 
             stmt.setLong(1, commandeId);

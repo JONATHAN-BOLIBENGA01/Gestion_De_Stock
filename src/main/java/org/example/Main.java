@@ -1,51 +1,44 @@
 package org.example;
 
 import org.example.dao.CategorieDAO;
+import org.example.dao.CommandeDAO;
 import org.example.dao.ProduitDAO;
-import org.example.product.Categorie;
-import org.example.product.Commande;
-import org.example.product.GestionStock;
-import org.example.product.Produit;
-import org.example.user.Admin;
-import org.example.user.Client;
-import org.example.user.User;
-import org.example.user.Vendeur;
+import org.example.product.*;
+import org.example.user.*;
 
 import java.util.ArrayList;
+import java.util.InputMismatchException;
 import java.util.List;
 import java.util.Scanner;
-import java.util.stream.Collectors;
 
 public class Main {
-    private static GestionStock gestionStock = new GestionStock();
-    private static Scanner scanner = new Scanner(System.in);
+    private static final GestionStock gestionStock = new GestionStock();
+    private static final Scanner scanner = new Scanner(System.in);
     private static User utilisateurActuel = null;
 
     public static void main(String[] args) {
-        System.out.println("========================================");
-        System.out.println("  🎉 BIENVENUE DANS NOTRE APPLICATION  🎉 ");
-        System.out.println("========================================");
+        afficherMessageBienvenue();
 
         int choix;
         do {
             afficherMenuPrincipal();
-            choix = scanner.nextInt();
-            scanner.nextLine();
+            choix = saisirChoixUtilisateur();
 
             switch (choix) {
-                case 1:
-                    inscrireUtilisateur();
-                    break;
-                case 2:
-                    seConnecter();
-                    break;
-                case 0:
-                    System.out.println("Merci d'avoir utilisé notre système. À bientôt !");
-                    break;
-                default:
-                    System.out.println("Choix invalide. Réessayez.");
+                case 1 -> inscrireUtilisateur();
+                case 2 -> seConnecter();
+                case 0 -> System.out.println("Merci d'avoir utilisé notre système. À bientôt !");
+                default -> System.out.println("Choix invalide. Réessayez.");
             }
         } while (choix != 0);
+
+        scanner.close();
+    }
+
+    private static void afficherMessageBienvenue() {
+        System.out.println("========================================");
+        System.out.println("  🎉 BIENVENUE DANS NOTRE APPLICATION  🎉 ");
+        System.out.println("========================================");
     }
 
     private static void afficherMenuPrincipal() {
@@ -56,14 +49,22 @@ public class Main {
         System.out.print("Votre choix : ");
     }
 
+    private static int saisirChoixUtilisateur() {
+        try {
+            return scanner.nextInt();
+        } catch (InputMismatchException e) {
+            scanner.nextLine();
+            return -1;
+        } finally {
+            scanner.nextLine();
+        }
+    }
+
     private static void inscrireUtilisateur() {
         System.out.println("\n=== Inscription ===");
-        System.out.print("Nom : ");
-        String nom = scanner.nextLine();
-        System.out.print("Email : ");
-        String email = scanner.nextLine();
-        System.out.print("Mot de passe : ");
-        String password = scanner.nextLine();
+        String nom = saisirInformation("Nom : ");
+        String email = saisirInformation("Email : ");
+        String password = saisirInformation("Mot de passe : ");
 
         if (User.emailExiste(email)) {
             System.out.println("\u26A0️ Cet email est déjà utilisé. Veuillez en choisir un autre.");
@@ -71,32 +72,39 @@ public class Main {
         }
 
         System.out.println("Rôle : (1) Client, (2) Vendeur, (3) Admin");
-        int role = scanner.nextInt();
-        scanner.nextLine();
+        int role = saisirChoixUtilisateur();
 
-        User nouvelUtilisateur;
-        if (role == 1) {
-            nouvelUtilisateur = new Client(nom, email, password);
-        } else if (role == 2) {
-            System.out.print("Matricule : ");
-            String matricule = scanner.nextLine();
-            nouvelUtilisateur = new Vendeur(nom, email, password, matricule);
-        } else if (role == 3) {
-            nouvelUtilisateur = new Admin(nom, email, password);
-        } else {
-            System.out.println("Rôle invalide. Inscription annulée.");
-            return;
+        User nouvelUtilisateur = creerUtilisateurSelonRole(nom, email, password, role);
+        if (nouvelUtilisateur != null) {
+            nouvelUtilisateur.sInscrire();
         }
+    }
 
-        nouvelUtilisateur.sInscrire();
+    private static String saisirInformation(String message) {
+        System.out.print(message);
+        return scanner.nextLine();
+    }
+
+    private static User creerUtilisateurSelonRole(String nom, String email, String password, int role) {
+        return switch (role) {
+            case 1 -> new Client(nom, email, password);
+            case 2 -> {
+                System.out.print("Matricule : ");
+                String matricule = scanner.nextLine();
+                yield new Vendeur(nom, email, password, matricule);
+            }
+            case 3 -> new Admin(nom, email, password);
+            default -> {
+                System.out.println("Rôle invalide. Inscription annulée.");
+                yield null;
+            }
+        };
     }
 
     private static void seConnecter() {
         System.out.println("\n=== Connexion ===");
-        System.out.print("Email : ");
-        String email = scanner.nextLine();
-        System.out.print("Mot de passe : ");
-        String password = scanner.nextLine();
+        String email = saisirInformation("Email : ");
+        String password = saisirInformation("Mot de passe : ");
 
         utilisateurActuel = User.seConnecter(email, password);
         if (utilisateurActuel != null) {
@@ -110,108 +118,114 @@ public class Main {
     private static void afficherMenuUtilisateur() {
         int choix;
         do {
-            System.out.println("\n==== Menu Utilisateur ====");
-            System.out.println("1. Consulter les produits");
-            System.out.println("2. Rechercher un produit");
-
-            if (utilisateurActuel instanceof Client) {
-                System.out.println("3. Passer une commande");
-            }
-
-            if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
-                System.out.println("4. Ajouter un produit");
-                System.out.println("5. Mettre à jour un produit");
-                System.out.println("6. Supprimer un produit");
-            }
-
-            if (utilisateurActuel instanceof Vendeur) {
-                System.out.println("7. Générer et valider une facture");
-            }
-
-            if (utilisateurActuel instanceof Admin) {
-                System.out.println("8. Ajouter une catégorie");
-                System.out.println("9. Gérer les commandes");
-                System.out.println("10. Générer rapport PDF");
-            }
-
-            System.out.println("0. Se déconnecter");
-            System.out.print("Votre choix : ");
-            choix = scanner.nextInt();
-            scanner.nextLine();
-
-            switch (choix) {
-                case 1:
-                    afficherProduits();
-                    break;
-                case 2:
-                    rechercherProduit();
-                    break;
-                case 3:
-                    if (utilisateurActuel instanceof Client) {
-                        passerCommandeClient();
-                    } else {
-                        System.out.println("\u26A0️ Vous n'avez pas les permissions nécessaires.");
-                    }
-                    break;
-                case 4:
-                    if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
-                        ajouterProduit();
-                    } else {
-                        System.out.println("\u26A0️ Vous n'avez pas les permissions nécessaires.");
-                    }
-                    break;
-                case 5:
-                    if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
-                        mettreAJourProduit();
-                    } else {
-                        System.out.println("\u26A0️ Vous n'avez pas les permissions nécessaires.");
-                    }
-                    break;
-                case 6:
-                    if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
-                        supprimerProduit();
-                    } else {
-                        System.out.println("\u26A0️ Vous n'avez pas les permissions nécessaires.");
-                    }
-                    break;
-                case 7:
-                    if (utilisateurActuel instanceof Vendeur) {
-                        genererFacture();
-                    } else {
-                        System.out.println("\u26A0️ Seul un vendeur peut générer des factures.");
-                    }
-                    break;
-                case 8:
-                    if (utilisateurActuel instanceof Admin) {
-                        ajouterCategorie();
-                    } else {
-                        System.out.println("\u26A0️ Seul un administrateur peut ajouter une catégorie.");
-                    }
-                    break;
-                case 9:
-                    if (utilisateurActuel instanceof Admin) {
-                        gererCommandes();
-                    } else {
-                        System.out.println("\u26A0️ Seul un administrateur peut gérer les commandes.");
-                    }
-                    break;
-                case 10:
-                    if (utilisateurActuel instanceof Admin) {
-                        ((Admin)utilisateurActuel).genererRapportPDF();
-                    } else {
-                        System.out.println("\u26A0️ Seul un administrateur peut générer des rapports.");
-                    }
-                    break;
-                case 0:
-                    System.out.println("Déconnexion réussie. Retour au menu principal.");
-                    utilisateurActuel = null;
-                    break;
-                default:
-                    System.out.println("Choix invalide. Réessayez.");
-            }
+            afficherOptionsMenuUtilisateur();
+            choix = saisirChoixUtilisateur();
+            traiterChoixUtilisateur(choix);
         } while (choix != 0 && utilisateurActuel != null);
     }
 
+    private static void afficherOptionsMenuUtilisateur() {
+        System.out.println("\n==== Menu Utilisateur ====");
+        System.out.println("1. Consulter les produits");
+        System.out.println("2. Rechercher un produit");
+
+        if (utilisateurActuel instanceof Client) {
+            System.out.println("3. Passer une commande");
+        }
+
+        if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
+            System.out.println("4. Ajouter un produit");
+            System.out.println("5. Mettre à jour un produit");
+            System.out.println("6. Supprimer un produit");
+        }
+
+        if (utilisateurActuel instanceof Vendeur) {
+            System.out.println("7. Générer et valider une facture");
+        }
+
+        if (utilisateurActuel instanceof Admin) {
+            System.out.println("8. Ajouter une catégorie");
+            System.out.println("9. Gérer les commandes");
+            System.out.println("10. Générer rapport PDF");
+        }
+
+        System.out.println("0. Se déconnecter");
+        System.out.print("Votre choix : ");
+    }
+
+    private static void traiterChoixUtilisateur(int choix) {
+        switch (choix) {
+            case 1 -> afficherProduits();
+            case 2 -> rechercherProduit();
+            case 3 -> {
+                if (utilisateurActuel instanceof Client) {
+                    passerCommandeClient();
+                } else {
+                    afficherMessagePermissionInsuffisante();
+                }
+            }
+            case 4 -> {
+                if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
+                    ajouterProduit();
+                } else {
+                    afficherMessagePermissionInsuffisante();
+                }
+            }
+            case 5 -> {
+                if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
+                    mettreAJourProduit();
+                } else {
+                    afficherMessagePermissionInsuffisante();
+                }
+            }
+            case 6 -> {
+                if (utilisateurActuel instanceof Vendeur || utilisateurActuel instanceof Admin) {
+                    supprimerProduit();
+                } else {
+                    afficherMessagePermissionInsuffisante();
+                }
+            }
+            case 7 -> {
+                if (utilisateurActuel instanceof Vendeur) {
+                    genererFacture();
+                } else {
+                    System.out.println("\u26A0️ Seul un vendeur peut générer des factures.");
+                }
+            }
+            case 8 -> {
+                if (utilisateurActuel instanceof Admin) {
+                    ajouterCategorie();
+                } else {
+                    System.out.println("\u26A0️ Seul un administrateur peut ajouter une catégorie.");
+                }
+            }
+            case 9 -> {
+                if (utilisateurActuel instanceof Admin) {
+                    gererCommandes();
+                } else {
+                    System.out.println("\u26A0️ Seul un administrateur peut gérer les commandes.");
+                }
+            }
+            case 10 -> {
+                if (utilisateurActuel instanceof Admin) {
+                    ((Admin)utilisateurActuel).genererRapportCompletPDF();
+                } else {
+                    System.out.println("\u26A0️ Seul un administrateur peut générer des rapports.");
+                }
+            }
+            case 0 -> {
+                System.out.println("Déconnexion réussie. Retour au menu principal.");
+                utilisateurActuel = null;
+            }
+            default -> System.out.println("Choix invalide. Réessayez.");
+        }
+    }
+
+    private static void afficherMessagePermissionInsuffisante() {
+        System.out.println("\u26A0️ Vous n'avez pas les permissions nécessaires.");
+    }
+
+    // Méthodes pour les clients
     private static void passerCommandeClient() {
         Client client = (Client) utilisateurActuel;
         List<Produit> produits = gestionStock.afficherProduits();
@@ -223,27 +237,32 @@ public class Main {
 
         while (true) {
             System.out.print("\nID du produit à commander (0 pour terminer): ");
-            Long id = scanner.nextLong();
-            scanner.nextLine();
+            try {
+                Long id = scanner.nextLong();
+                scanner.nextLine();
 
-            if (id == 0) break;
+                if (id == 0) break;
 
-            Produit produit = produits.stream()
-                    .filter(p -> p.getId().equals(id))
-                    .findFirst()
-                    .orElse(null);
+                Produit produit = produits.stream()
+                        .filter(p -> p.getId().equals(id))
+                        .findFirst()
+                        .orElse(null);
 
-            if (produit == null) {
-                System.out.println("Produit non trouvé");
-                continue;
+                if (produit == null) {
+                    System.out.println("Produit non trouvé");
+                    continue;
+                }
+
+                System.out.print("Quantité pour " + produit.getNom() + ": ");
+                int quantite = scanner.nextInt();
+                scanner.nextLine();
+
+                produitsSelectionnes.add(produit);
+                quantites.add(quantite);
+            } catch (InputMismatchException e) {
+                System.out.println("Veuillez entrer un nombre valide");
+                scanner.nextLine();
             }
-
-            System.out.print("Quantité pour " + produit.getNom() + ": ");
-            int quantite = scanner.nextInt();
-            scanner.nextLine();
-
-            produitsSelectionnes.add(produit);
-            quantites.add(quantite);
         }
 
         if (!produitsSelectionnes.isEmpty()) {
@@ -251,16 +270,22 @@ public class Main {
         }
     }
 
+    // Méthodes pour les vendeurs
     private static void genererFacture() {
         Vendeur vendeur = (Vendeur) utilisateurActuel;
         System.out.println("\n=== Générer et valider une facture ===");
         System.out.print("ID de la commande: ");
-        Long commandeId = scanner.nextLong();
-        scanner.nextLine();
-
-        vendeur.genererEtValiderFacture(commandeId);
+        try {
+            Long commandeId = scanner.nextLong();
+            scanner.nextLine();
+            vendeur.genererEtValiderFacture(commandeId);
+        } catch (InputMismatchException e) {
+            System.out.println("ID invalide");
+            scanner.nextLine();
+        }
     }
 
+    // Méthodes pour les administrateurs
     private static void gererCommandes() {
         Admin admin = (Admin) utilisateurActuel;
         int choix;
@@ -271,83 +296,86 @@ public class Main {
             System.out.println("3. Voir l'historique des commandes");
             System.out.println("0. Retour");
             System.out.print("Votre choix : ");
-            choix = scanner.nextInt();
-            scanner.nextLine();
+
+            choix = saisirChoixUtilisateur();
 
             switch (choix) {
-                case 1:
-                    passerCommandeReapprovisionnement(admin);
-                    break;
-                case 2:
-                    validerLivraison(admin);
-                    break;
-                case 3:
-                    afficherHistoriqueCommandes(admin);
-                    break;
-                case 0:
-                    System.out.println("Retour au menu principal.");
-                    break;
-                default:
-                    System.out.println("Choix invalide. Réessayez.");
+                case 1 -> passerCommandeReapprovisionnement(admin);
+                case 2 -> validerLivraison(admin);
+                case 3 -> afficherHistoriqueCommandes(admin);
+                case 0 -> System.out.println("Retour au menu principal.");
+                default -> System.out.println("Choix invalide. Réessayez.");
             }
         } while (choix != 0);
     }
 
     private static void passerCommandeReapprovisionnement(Admin admin) {
-        System.out.println("\n=== Commande de réapprovisionnement ===");
         Commande commande = admin.creerCommandePourProduitsSousSeuil();
-
         if (commande != null) {
             System.out.println("✅ Commande créée avec succès !");
-            System.out.println("Détails de la commande :");
-            System.out.println("ID: " + commande.getId());
-            System.out.println("Date: " + commande.getDateCommande());
-            System.out.println("Total: " + commande.calculerTotal() + " $");
-
-            System.out.println("\nProduits commandés :");
-            for (Commande.LigneCommande ligne : commande.getLignesCommande()) {
-                System.out.println("- " + ligne.getProduit().getNom() +
-                        " | Quantité: " + ligne.getQuantite() +
-                        " | Prix unitaire: " + ligne.getProduit().getPrix() + " $");
-            }
+            afficherDetailsCommande(commande);
         } else {
             System.out.println("Aucun produit ne nécessite de réapprovisionnement pour le moment.");
         }
     }
 
     private static void validerLivraison(Admin admin) {
-        System.out.println("\n=== Validation de livraison ===");
         System.out.print("Entrez l'ID de la commande à valider : ");
-        Long commandeId = scanner.nextLong();
-        scanner.nextLine();
-
-        admin.validerLivraisonCommande(commandeId);
+        try {
+            Long commandeId = scanner.nextLong();
+            scanner.nextLine();
+            admin.validerLivraisonCommande(commandeId);
+        } catch (InputMismatchException e) {
+            System.out.println("Erreur : ID invalide.");
+            scanner.nextLine();
+        }
     }
 
     private static void afficherHistoriqueCommandes(Admin admin) {
-        System.out.println("\n=== Historique des Commandes ===");
-        List<Commande> commandes = admin.getHistoriqueCommandes();
-
+        List<Commande> commandes = CommandeDAO.getCommandesByAdmin(admin.getEmail());
         if (commandes.isEmpty()) {
             System.out.println("Aucune commande enregistrée.");
             return;
         }
+        commandes.forEach(Main::afficherDetailsCommande);
+    }
 
-        for (Commande cmd : commandes) {
-            System.out.println("\nCommande #" + cmd.getId());
-            System.out.println("Date: " + cmd.getDateCommande());
-            System.out.println("Statut: " + (cmd.isEstLivree() ? "Livrée" : "En attente"));
-            System.out.println("Total: " + cmd.calculerTotal() + " $");
+    private static void afficherDetailsCommande(Commande commande) {
+        System.out.println("\nCommande #" + commande.getId());
+        System.out.println("Date: " + commande.getDateCommande());
+        System.out.println("Statut: " + (commande.isEstLivree() ? "Livrée" : "En attente"));
+        System.out.println("Total: " + commande.calculerTotal() + " €");
 
-            System.out.println("Produits :");
-            for (Commande.LigneCommande ligne : cmd.getLignesCommande()) {
-                System.out.println("- " + ligne.getProduit().getNom() +
-                        " | Quantité: " + ligne.getQuantite() +
-                        " | Prix unitaire: " + ligne.getProduit().getPrix() + " $");
-            }
+        System.out.println("Produits :");
+        commande.getLignesCommande().forEach(ligne ->
+                System.out.printf("- %s | Quantité: %d | Prix unitaire: %.2f €%n",
+                        ligne.getProduit().getNom(),
+                        ligne.getQuantite(),
+                        ligne.getProduit().getPrix())
+        );
+    }
+
+    private static void ajouterCategorie() {
+        System.out.print("Nom de la nouvelle catégorie : ");
+        String nomCategorie = scanner.nextLine().trim();
+
+        if (nomCategorie.isEmpty()) {
+            System.out.println("Erreur : le nom ne peut pas être vide.");
+            return;
+        }
+
+        Categorie nouvelleCategorie = new Categorie(nomCategorie);
+        boolean success = CategorieDAO.saveCategorie(nouvelleCategorie);
+
+        if (success) {
+            System.out.println("✅ Catégorie ajoutée avec succès !");
+        } else {
+            boolean b = false;
+            System.out.println("Erreur lors de l'ajout de la catégorie.");
         }
     }
 
+    // Méthodes pour la gestion des produits
     private static void ajouterProduit() {
         System.out.print("Nom du produit : ");
         String nom = scanner.nextLine();
@@ -366,9 +394,7 @@ public class Main {
         }
 
         System.out.println("=== Choisissez une catégorie ===");
-        for (Categorie cat : categories) {
-            System.out.println(cat.getId() + ". " + cat.getNom());
-        }
+        categories.forEach(cat -> System.out.println(cat.getId() + ". " + cat.getNom()));
 
         System.out.print("ID de la catégorie : ");
         Long idCategorie = scanner.nextLong();
@@ -379,15 +405,16 @@ public class Main {
             System.out.println("❌ Catégorie invalide.");
             return;
         }
+
         Produit nouveauProduit = new Produit(nom, prix, quantiteStock, seuilAlerte, categorie);
-        gestionStock.ajouterProduit(nouveauProduit);
 
         if (utilisateurActuel instanceof Vendeur) {
             gestionStock.ajouterProduit(nouveauProduit, utilisateurActuel.getEmail());
         } else {
             gestionStock.ajouterProduit(nouveauProduit);
         }
-        gestionStock.ajouterProduit(nouveauProduit);
+
+        System.out.println("✅ Produit ajouté avec succès !");
     }
 
     private static void mettreAJourProduit() {
@@ -416,7 +443,11 @@ public class Main {
         Long id = scanner.nextLong();
         scanner.nextLine();
 
-        gestionStock.supprimerProduit(id);
+        if (gestionStock.supprimerProduit(id)) {
+            System.out.println("✅ Produit supprimé !");
+        } else {
+            System.out.println("⚠️ Échec de la suppression du produit.");
+        }
     }
 
     private static void afficherProduits() {
@@ -425,42 +456,33 @@ public class Main {
             System.out.println("Aucun produit en stock.");
         } else {
             System.out.println("\n=== Liste des Produits ===");
-            for (Produit p : produits) {
-                System.out.println("ID: " + p.getId() + " | Nom: " + p.getNom() +
-                        " | Prix: " + p.getPrix() + " | Stock: " + p.getQuantiteStock() +
-                        " | Catégorie: " + (p.getCategorie() != null ? p.getCategorie().getNom() : "Aucune"));
-            }
+            produits.forEach(p -> System.out.printf(
+                    "ID: %d | Nom: %s | Prix: %.2f € | Stock: %d | Catégorie: %s%n",
+                    p.getId(),
+                    p.getNom(),
+                    p.getPrix(),
+                    p.getQuantiteStock(),
+                    p.getCategorie() != null ? p.getCategorie().getNom() : "Aucune"
+            ));
         }
     }
 
-    private static void ajouterCategorie() {
-        System.out.print("Nom de la nouvelle catégorie : ");
-        String nomCategorie = scanner.nextLine();
-
-        Categorie nouvelleCategorie = new Categorie(nomCategorie);
-        CategorieDAO.saveCategorie(nouvelleCategorie);
-
-        System.out.println("✅ Catégorie ajoutée avec succès !");
-    }
-
     private static void rechercherProduit() {
-        System.out.println("\n=== Recherche de Produit ===");
         System.out.print("Entrez le nom du produit à rechercher : ");
-        String nomRecherche = scanner.nextLine();
+        String nomRecherche = scanner.nextLine().toLowerCase();
 
         List<Produit> produitsTrouves = gestionStock.afficherProduits().stream()
-                .filter(p -> p.getNom().toLowerCase().contains(nomRecherche.toLowerCase()))
-                .collect(Collectors.toList());
+                .filter(p -> p.getNom().toLowerCase().contains(nomRecherche))
+                .toList();
 
         if (produitsTrouves.isEmpty()) {
             System.out.println("Aucun produit trouvé avec ce nom.");
         } else {
             System.out.println("\n=== Résultats de la recherche ===");
-            for (Produit p : produitsTrouves) {
-                System.out.println("ID: " + p.getId() + " | Nom: " + p.getNom() +
-                        " | Prix: " + p.getPrix() + " | Stock: " + p.getQuantiteStock() +
-                        " | Catégorie: " + (p.getCategorie() != null ? p.getCategorie().getNom() : "Aucune"));
-            }
+            produitsTrouves.forEach(p -> System.out.printf(
+                    "ID: %d | Nom: %s | Prix: %.2f € | Stock: %d%n",
+                    p.getId(), p.getNom(), p.getPrix(), p.getQuantiteStock()
+            ));
         }
     }
 }
